@@ -307,17 +307,6 @@ const Jobs = () => {
                     <Calendar size={16} />
                     Manage Schedule
                   </button>
-                  <button
-                    onClick={() => {
-                      // Create a new job pre-filled with this client
-                      setSelectedJob({ clientId: client.id, clientName: client.name, isRecurring: true });
-                      setShowModal(true);
-                    }}
-                    className="btn btn-secondary text-sm flex items-center gap-1"
-                  >
-                    <Plus size={16} />
-                    Add Date
-                  </button>
                 </div>
               </div>
             ))

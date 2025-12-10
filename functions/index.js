@@ -1,32 +1,98 @@
+const functions = require('firebase-functions');
+const admin = require('firebase-admin');
+const { google } = require('googleapis');
+const cors = require('cors')({ origin: true });
+
+admin.initializeApp();
+
+const getOAuth2Client = () => {
+    return new google.auth.OAuth2(
+        process.env.GOOGLE_CLIENT_ID,
+        process.env.GOOGLE_CLIENT_SECRET,
+        'postmessage'
+    );
+};
+
 /**
- * Import function triggers from their respective submodules:
- *
- * const {onCall} = require("firebase-functions/v2/https");
- * const {onDocumentWritten} = require("firebase-functions/v2/firestore");
- *
- * See a full list of supported triggers at https://firebase.google.com/docs/functions
+ * Exchange authorization code for tokens
  */
+exports.exchangeGoogleCode = functions.https.onRequest((req, res) => {
+  cors(req, res, async () => {
+    try {
+      const { code } = req.body;
+      
+      if (!code) {
+        return res.status(400).json({ error: 'Code required' });
+      }
 
-const {setGlobalOptions} = require("firebase-functions");
-const {onRequest} = require("firebase-functions/https");
-const logger = require("firebase-functions/logger");
+      const oauth2Client = getOAuth2Client();
+      const { tokens } = await oauth2Client.getToken(code);
 
-// For cost control, you can set the maximum number of containers that can be
-// running at the same time. This helps mitigate the impact of unexpected
-// traffic spikes by instead downgrading performance. This limit is a
-// per-function limit. You can override the limit for each function using the
-// `maxInstances` option in the function's options, e.g.
-// `onRequest({ maxInstances: 5 }, (req, res) => { ... })`.
-// NOTE: setGlobalOptions does not apply to functions using the v1 API. V1
-// functions should each use functions.runWith({ maxInstances: 10 }) instead.
-// In the v1 API, each function can only serve one request per container, so
-// this will be the maximum concurrent request count.
-setGlobalOptions({ maxInstances: 10 });
+      // Save tokens to Firestore
+      await admin.firestore().collection('settings').doc('calendar').set({
+        providers: {
+          google: {
+            enabled: true,
+            accessToken: tokens.access_token,
+            refreshToken: tokens.refresh_token,
+            expiryDate: tokens.expiry_date,
+            calendarId: 'primary',
+            syncEnabled: true,
+            reminderMinutes: [60, 1440]
+          }
+        },
+        defaultProvider: 'google',
+        syncInterval: 15,
+        autoSync: true,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
 
-// Create and deploy your first functions
-// https://firebase.google.com/docs/functions/get-started
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+});
 
-// exports.helloWorld = onRequest((request, response) => {
-//   logger.info("Hello logs!", {structuredData: true});
-//   response.send("Hello from Firebase!");
-// });
+/**
+ * Get fresh access token using refresh token
+ */
+exports.getAccessToken = functions.https.onRequest((req, res) => {
+  cors(req, res, async () => {
+    try {
+      const settingsDoc = await admin.firestore().collection('settings').doc('calendar').get();
+      
+      if (!settingsDoc.exists) {
+        return res.status(404).json({ error: 'Not configured' });
+      }
+
+      const settings = settingsDoc.data();
+      const refreshToken = settings.providers?.google?.refreshToken;
+
+      if (!refreshToken) {
+        return res.status(400).json({ error: 'No refresh token' });
+      }
+
+      const oauth2Client = getOAuth2Client();
+      oauth2Client.setCredentials({ refresh_token: refreshToken });
+
+      const { credentials } = await oauth2Client.refreshAccessToken();
+
+      // Update access token in Firestore
+      await admin.firestore().collection('settings').doc('calendar').update({
+        'providers.google.accessToken': credentials.access_token,
+        'providers.google.expiryDate': credentials.expiry_date,
+        updatedAt: new Date().toISOString()
+      });
+
+      res.json({ 
+        accessToken: credentials.access_token,
+        expiryDate: credentials.expiry_date
+      });
+    } catch (error) {
+      console.error('Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+});
