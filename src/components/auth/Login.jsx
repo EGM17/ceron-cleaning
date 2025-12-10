@@ -84,13 +84,6 @@ const Login = () => {
               {loading ? 'Signing in...' : 'Sign In'}
             </button>
           </form>
-
-          <div className="mt-6 text-center text-sm text-gray-600">
-            <p>Demo credentials:</p>
-            <p className="font-mono bg-gray-50 p-2 rounded mt-2">
-              admin@ceroncleaning.com / admin123
-            </p>
-          </div>
         </div>
 
         {/* Footer */}

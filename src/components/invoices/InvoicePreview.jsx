@@ -1,11 +1,11 @@
 import { formatDate, formatCurrency } from '../../utils/helpers';
-import { Download, X } from 'lucide-react';
+import { Download } from 'lucide-react';
 import { downloadInvoice } from '../../utils/invoiceGenerator';
 
-const InvoicePreview = ({ invoice, onClose }) => {
-  const handleDownload = () => {
+const InvoicePreview = ({ invoice, onClose, companySettings }) => {
+  const handleDownload = async () => {
     if (invoice.client && invoice.job) {
-      downloadInvoice(invoice, invoice.client, invoice.job);
+      await downloadInvoice(invoice, invoice.client, invoice.job, companySettings);
     }
   };
 
@@ -29,10 +29,26 @@ const InvoicePreview = ({ invoice, onClose }) => {
       {/* Invoice content */}
       <div className="bg-white border border-gray-200 rounded-lg p-8">
         {/* Company header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">CERON CLEANING</h1>
-          <p className="text-gray-600">Commercial & Residential Cleaning</p>
-          <p className="text-gray-600">Vancouver, WA</p>
+        <div className="flex items-start gap-4 mb-8">
+          {companySettings?.logo && (
+            <img 
+              src={companySettings.logo} 
+              alt="Company Logo" 
+              className="w-20 h-20 object-contain"
+            />
+          )}
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">{companySettings?.name || 'CERON CLEANING'}</h1>
+            <p className="text-gray-600">{companySettings?.address || ''}</p>
+            <p className="text-gray-600">
+              {[companySettings?.city, companySettings?.state, companySettings?.zipCode]
+                .filter(Boolean)
+                .join(', ')}
+            </p>
+            {companySettings?.phone && <p className="text-gray-600">Phone: {companySettings.phone}</p>}
+            {companySettings?.email && <p className="text-gray-600">Email: {companySettings.email}</p>}
+            {companySettings?.website && <p className="text-gray-600">Website: {companySettings.website}</p>}
+          </div>
         </div>
 
         {/* Invoice info */}
@@ -61,7 +77,7 @@ const InvoicePreview = ({ invoice, onClose }) => {
         {invoice.job && (
           <div className="mb-8 p-4 bg-gray-50 rounded-lg">
             <h3 className="font-semibold text-gray-900 mb-2">Job Details:</h3>
-            <p className="text-gray-600">Type: <span className="font-medium text-gray-900 capitalize">{invoice.job.type}</span></p>
+            <p className="text-gray-600">Type: <span className="font-medium text-gray-900 capitalize">{invoice.job.jobType || 'N/A'}</span></p>
             <p className="text-gray-600">Date: <span className="font-medium text-gray-900">{formatDate(invoice.job.date)}</span></p>
             {invoice.job.location && (
               <p className="text-gray-600">Location: <span className="font-medium text-gray-900">{invoice.job.location}</span></p>
@@ -78,52 +94,56 @@ const InvoicePreview = ({ invoice, onClose }) => {
         )}
 
         {/* Items table */}
-        <div className="mb-8">
-          <table className="w-full">
-            <thead className="border-b-2 border-gray-300">
-              <tr>
-                <th className="text-left py-3 text-gray-700 font-semibold">#</th>
-                <th className="text-left py-3 text-gray-700 font-semibold">Description</th>
-                <th className="text-right py-3 text-gray-700 font-semibold">Amount</th>
+        <table className="w-full mb-8">
+          <thead>
+            <tr className="border-b-2 border-gray-200">
+              <th className="text-left py-2 text-gray-600">#</th>
+              <th className="text-left py-2 text-gray-600">Description</th>
+              <th className="text-right py-2 text-gray-600">Qty</th>
+              <th className="text-right py-2 text-gray-600">Unit Price</th>
+              <th className="text-right py-2 text-gray-600">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b border-gray-100">
+              <td className="py-3">1</td>
+              <td className="py-3">{invoice.serviceDescription || 'Cleaning Service'}</td>
+              <td className="text-right py-3">1</td>
+              <td className="text-right py-3">{formatCurrency(invoice.baseAmount)}</td>
+              <td className="text-right py-3">{formatCurrency(invoice.baseAmount)}</td>
+            </tr>
+            {invoice.additionalCharges && invoice.additionalCharges.map((charge, index) => (
+              <tr key={index} className="border-b border-gray-100">
+                <td className="py-3">{index + 2}</td>
+                <td className="py-3">{charge.description}</td>
+                <td className="text-right py-3">1</td>
+                <td className="text-right py-3">{formatCurrency(charge.amount)}</td>
+                <td className="text-right py-3">{formatCurrency(charge.amount)}</td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              <tr>
-                <td className="py-3 text-gray-600">1</td>
-                <td className="py-3 text-gray-900">Cleaning Service</td>
-                <td className="py-3 text-right text-gray-900">{formatCurrency(invoice.baseAmount)}</td>
-              </tr>
-              {invoice.additionalCharges?.map((charge, index) => (
-                <tr key={index}>
-                  <td className="py-3 text-gray-600">{index + 2}</td>
-                  <td className="py-3 text-gray-900">{charge.description}</td>
-                  <td className="py-3 text-right text-gray-900">{formatCurrency(charge.amount)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
 
         {/* Totals */}
         <div className="flex justify-end mb-8">
           <div className="w-64 space-y-2">
             <div className="flex justify-between text-gray-600">
               <span>Subtotal:</span>
-              <span className="font-medium text-gray-900">{formatCurrency(invoice.subtotal)}</span>
+              <span>{formatCurrency(invoice.subtotal)}</span>
             </div>
             {invoice.discount > 0 && (
               <div className="flex justify-between text-gray-600">
-                <span>Discount {invoice.discountPercent > 0 && `(${invoice.discountPercent}%)`}:</span>
-                <span className="font-medium text-red-600">-{formatCurrency(invoice.discount)}</span>
+                <span>Discount ({invoice.discountPercent || 0}%):</span>
+                <span>-{formatCurrency(invoice.discount)}</span>
               </div>
             )}
             {invoice.tax > 0 && (
               <div className="flex justify-between text-gray-600">
-                <span>Tax {invoice.taxPercent > 0 && `(${invoice.taxPercent}%)`}:</span>
-                <span className="font-medium text-gray-900">{formatCurrency(invoice.tax)}</span>
+                <span>Tax ({invoice.taxPercent || 0}%):</span>
+                <span>{formatCurrency(invoice.tax)}</span>
               </div>
             )}
-            <div className="border-t-2 border-gray-300 pt-2 flex justify-between text-lg font-bold">
+            <div className="flex justify-between font-bold text-lg text-gray-900 pt-2 border-t-2 border-gray-200">
               <span>Total:</span>
               <span>{formatCurrency(invoice.total)}</span>
             </div>
@@ -131,9 +151,9 @@ const InvoicePreview = ({ invoice, onClose }) => {
               <>
                 <div className="flex justify-between text-gray-600">
                   <span>Amount Paid:</span>
-                  <span className="font-medium text-green-600">{formatCurrency(invoice.amountPaid)}</span>
+                  <span>{formatCurrency(invoice.amountPaid)}</span>
                 </div>
-                <div className="flex justify-between text-lg font-bold text-red-600">
+                <div className="flex justify-between font-bold text-gray-900">
                   <span>Balance Due:</span>
                   <span>{formatCurrency(invoice.total - invoice.amountPaid)}</span>
                 </div>
@@ -151,20 +171,10 @@ const InvoicePreview = ({ invoice, onClose }) => {
         )}
 
         {/* Footer */}
-        <div className="text-center text-sm text-gray-500 pt-8 border-t border-gray-200">
-          <p>Thank you for your business!</p>
-          <p className="mt-2">Payment is due within 30 days. Please make checks payable to CERON CLEANING.</p>
+        <div className="text-center text-gray-600 text-sm border-t border-gray-200 pt-6">
+          <p className="mb-2">Thank you for your business!</p>
+          <p>Payment is due within 30 days. Please make checks payable to {companySettings?.name || 'CERON CLEANING'}.</p>
         </div>
-      </div>
-
-      {/* Close button */}
-      <div className="flex justify-end pt-4 border-t border-gray-200">
-        <button
-          onClick={onClose}
-          className="btn btn-secondary"
-        >
-          Close
-        </button>
       </div>
     </div>
   );

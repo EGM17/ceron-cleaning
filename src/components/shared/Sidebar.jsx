@@ -8,6 +8,7 @@ import {
   FileText,
   Calendar,
   Settings,
+  CreditCard,
   X
 } from 'lucide-react';
 import { collection, getDocs } from 'firebase/firestore';
@@ -68,6 +69,7 @@ const Sidebar = ({ sidebarOpen, toggleSidebar }) => {
     { name: 'Clients', path: '/clients', icon: Users },
     { name: 'Payments', path: '/payments', icon: DollarSign },
     { name: 'Invoices', path: '/invoices', icon: FileText },
+    { name: 'Checks', path: '/checks', icon: CreditCard },
     { name: 'Calendar', path: '/calendar', icon: Calendar },
     { name: 'Settings', path: '/settings', icon: Settings },
   ];
@@ -112,7 +114,7 @@ const Sidebar = ({ sidebarOpen, toggleSidebar }) => {
             ))}
           </nav>
 
-          {/* Quick stats - NOW DYNAMIC */}
+          {/* Quick stats */}
           <div className="mt-8 px-6">
             <div className="bg-gradient-to-br from-primary-500 to-primary-700 rounded-xl p-4 text-white shadow-lg">
               <h3 className="text-sm font-medium mb-3 opacity-90">Quick Stats</h3>
