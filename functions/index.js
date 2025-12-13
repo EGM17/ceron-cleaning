@@ -1,7 +1,12 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const { google } = require('googleapis');
-const cors = require('cors')({ origin: true });
+const cors = require('cors')({ 
+  origin: [
+    'https://ceron-cleaning.web.app',
+    'http://localhost:3000'
+  ]
+});
 
 admin.initializeApp();
 

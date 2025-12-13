@@ -249,7 +249,7 @@ const CheckForm = ({ check, onClose }) => {
               type="file"
               accept="image/*"
               onChange={handlePhotoSelect}
-              className="hidden"
+              className="absolute w-0 h-0 opacity-0 pointer-events-none"
               id="check-photo-upload"
             />
             <Camera size={40} className="mx-auto text-gray-400 mb-2" />
