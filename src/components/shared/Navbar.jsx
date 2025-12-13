@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { Bell, User, LogOut, Menu, X } from 'lucide-react';
+import { User, LogOut, Menu, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const Navbar = ({ toggleSidebar, sidebarOpen }) => {
@@ -40,14 +40,8 @@ const Navbar = ({ toggleSidebar, sidebarOpen }) => {
             </div>
           </div>
 
-          {/* Right side - Notifications and user menu */}
+          {/* Right side - User menu only */}
           <div className="flex items-center gap-3">
-            {/* Notifications */}
-            <button className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors">
-              <Bell size={20} className="text-gray-600" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-danger rounded-full"></span>
-            </button>
-
             {/* User menu */}
             <div className="relative">
               <button

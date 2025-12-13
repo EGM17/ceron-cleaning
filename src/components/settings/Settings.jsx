@@ -2,14 +2,11 @@ import { useState } from 'react';
 import { 
   Building2, 
   Calendar, 
-  FileText, 
-  Bell,
-  Settings as SettingsIcon
+  FileText
 } from 'lucide-react';
 import CompanySettings from './CompanySettings';
 import CalendarSettings from './CalendarSettings';
 import InvoiceSettings from './InvoiceSettings';
-import NotificationSettings from './NotificationSettings';
 
 const Settings = () => {
   const [activeTab, setActiveTab] = useState('company');
@@ -17,8 +14,7 @@ const Settings = () => {
   const tabs = [
     { id: 'company', label: 'Company', icon: Building2 },
     { id: 'calendar', label: 'Calendar Integration', icon: Calendar },
-    { id: 'invoices', label: 'Invoices', icon: FileText },
-    { id: 'notifications', label: 'Notifications', icon: Bell }
+    { id: 'invoices', label: 'Invoices', icon: FileText }
   ];
 
   const renderTabContent = () => {
@@ -29,8 +25,6 @@ const Settings = () => {
         return <CalendarSettings />;
       case 'invoices':
         return <InvoiceSettings />;
-      case 'notifications':
-        return <NotificationSettings />;
       default:
         return <CompanySettings />;
     }
