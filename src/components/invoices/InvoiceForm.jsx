@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
-import { collection, addDoc, updateDoc, doc, getDocs, query, where } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc, getDocs, setDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { Plus, X } from 'lucide-react';
 
 const InvoiceForm = ({ invoice, onClose }) => {
   const [formData, setFormData] = useState({
-    jobId: '',
-    clientId: '',
     invoiceNumber: '',
+    clientId: '',
+    jobId: '', // Optional now
     date: new Date().toISOString().split('T')[0],
     dueDate: '',
     serviceDescription: '',
@@ -19,21 +19,31 @@ const InvoiceForm = ({ invoice, onClose }) => {
     taxPercent: 0,
     notes: ''
   });
-  
+
   const [jobs, setJobs] = useState([]);
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [newCharge, setNewCharge] = useState({ description: '', amount: '' });
+  const [newCharge, setNewCharge] = useState({ 
+    description: '', 
+    amount: '', 
+    date: new Date().toISOString().split('T')[0],
+    jobId: ''
+  });
 
   useEffect(() => {
     fetchData();
     if (!invoice) {
       generateInvoiceNumber();
-    } else {
+    }
+  }, []);
+
+  useEffect(() => {
+    if (invoice) {
       setFormData({
         ...invoice,
         date: new Date(invoice.date).toISOString().split('T')[0],
-        dueDate: invoice.dueDate ? new Date(invoice.dueDate).toISOString().split('T')[0] : ''
+        dueDate: invoice.dueDate ? 
+          new Date(invoice.dueDate).toISOString().split('T')[0] : ''
       });
     }
   }, [invoice]);
@@ -54,7 +64,7 @@ const InvoiceForm = ({ invoice, onClose }) => {
 
   const generateInvoiceNumber = () => {
     const year = new Date().getFullYear();
-    const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+    const random = Math.floor(Math.random() + 10000).toString().padStart(4, '0');
     setFormData(prev => ({ ...prev, invoiceNumber: `INV-${year}-${random}` }));
   };
 
@@ -62,30 +72,37 @@ const InvoiceForm = ({ invoice, onClose }) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
 
-    // Auto-fill client when job is selected
-    if (name === 'jobId') {
+    // Auto-fill when job is selected (optional)
+    if (name === 'jobId' && value) {
       const selectedJob = jobs.find(j => j.id === value);
       if (selectedJob) {
         setFormData(prev => ({
           ...prev,
           clientId: selectedJob.clientId,
-          baseAmount: selectedJob.amount || '',
-          serviceDescription: selectedJob.description || ''
+          baseAmount: selectedJob.amount || prev.baseAmount,
+          serviceDescription: selectedJob.description || prev.serviceDescription
         }));
       }
     }
   };
 
   const handleAddCharge = () => {
-    if (newCharge.description && newCharge.amount) {
+    if (newCharge.description && newCharge.amount && newCharge.date) {
       setFormData(prev => ({
         ...prev,
         additionalCharges: [...prev.additionalCharges, {
           description: newCharge.description,
-          amount: parseFloat(newCharge.amount)
+          amount: parseFloat(newCharge.amount),
+          date: newCharge.date,
+          jobId: newCharge.jobId || null
         }]
       }));
-      setNewCharge({ description: '', amount: '' });
+      setNewCharge({ 
+        description: '', 
+        amount: '', 
+        date: new Date().toISOString().split('T')[0],
+        jobId: ''
+      });
     }
   };
 
@@ -101,10 +118,15 @@ const InvoiceForm = ({ invoice, onClose }) => {
     const charges = formData.additionalCharges.reduce((sum, charge) => sum + charge.amount, 0);
     const subtotal = base + charges;
     
-    const discount = formData.discountPercent ? (subtotal * formData.discountPercent / 100) : parseFloat(formData.discount) || 0;
+    const discount = formData.discountPercent ? 
+      (subtotal * formData.discountPercent / 100) : 
+      parseFloat(formData.discount) || 0;
     const afterDiscount = subtotal - discount;
     
-    const tax = formData.taxPercent ? (afterDiscount * formData.taxPercent / 100) : parseFloat(formData.tax) || 0;
+    const tax = formData.taxPercent ? 
+      (afterDiscount * formData.taxPercent / 100) : 
+      parseFloat(formData.tax) || 0;
+    
     const total = afterDiscount + tax;
 
     return { subtotal, discount, tax, total };
@@ -112,31 +134,42 @@ const InvoiceForm = ({ invoice, onClose }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     try {
       setLoading(true);
+
       const { subtotal, discount, tax, total } = calculateTotals();
 
       const invoiceData = {
-        ...formData,
-        baseAmount: parseFloat(formData.baseAmount) || 0,
+        invoiceNumber: formData.invoiceNumber,
+        clientId: formData.clientId,
+        jobId: formData.jobId || null, // Can be null now
+        date: formData.date,
+        dueDate: formData.dueDate || null,
+        serviceDescription: formData.serviceDescription,
+        baseAmount: parseFloat(formData.baseAmount),
+        additionalCharges: formData.additionalCharges,
         discount,
+        discountPercent: parseFloat(formData.discountPercent) || 0,
         tax,
+        taxPercent: parseFloat(formData.taxPercent) || 0,
         subtotal,
         total,
-        amountPaid: invoice?.amountPaid || 0,
-        status: invoice?.status || 'pending',
-        payments: invoice?.payments || [],
+        amountPaid: 0,
+        status: 'pending',
+        notes: formData.notes,
         updatedAt: new Date().toISOString()
       };
 
       if (invoice) {
         await updateDoc(doc(db, 'invoices', invoice.id), invoiceData);
+        alert('Invoice updated successfully! ✅');
       } else {
         await addDoc(collection(db, 'invoices'), {
           ...invoiceData,
           createdAt: new Date().toISOString()
         });
+        alert('Invoice created successfully! ✅');
       }
 
       onClose();
@@ -189,50 +222,54 @@ const InvoiceForm = ({ invoice, onClose }) => {
         />
       </div>
 
-      {/* Job and Client selection */}
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="label">Job</label>
-          <select
-            name="jobId"
-            value={formData.jobId}
-            onChange={handleChange}
-            className="input"
-          >
-            <option value="">Select a job</option>
-            {jobs.map(job => (
-              <option key={job.id} value={job.id}>
-                {job.clientName} - {job.type} ({new Date(job.date).toLocaleDateString()})
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="label">Client *</label>
-          <select
-            name="clientId"
-            value={formData.clientId}
-            onChange={handleChange}
-            required
-            className="input"
-          >
-            <option value="">Select a client</option>
-            {clients.map(client => (
-              <option key={client.id} value={client.id}>
-                {client.name}
-              </option>
-            ))}
-          </select>
-        </div>
+      {/* Client selection (required) */}
+      <div>
+        <label className="label">Client *</label>
+        <select
+          name="clientId"
+          value={formData.clientId}
+          onChange={handleChange}
+          required
+          className="input"
+        >
+          <option value="">Select a client</option>
+          {clients.map(client => (
+            <option key={client.id} value={client.id}>
+              {client.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Job selection (OPTIONAL now) */}
+      <div>
+        <label className="label">Job (Optional)</label>
+        <select
+          name="jobId"
+          value={formData.jobId}
+          onChange={handleChange}
+          className="input"
+        >
+          <option value="">No job linked</option>
+          {jobs.map(job => (
+            <option key={job.id} value={job.id}>
+              {job.clientName} - {job.type} ({new Date(job.date).toLocaleDateString()})
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-gray-500 mt-1">
+          You can create an invoice without linking to a specific job
+        </p>
       </div>
 
       {/* Service description */}
       <div>
-        <label className="label">Service Description</label>
+        <label className="label">Service Description *</label>
         <textarea
           name="serviceDescription"
           value={formData.serviceDescription}
           onChange={handleChange}
+          required
           rows="3"
           className="input"
           placeholder="Describe the service provided..."
@@ -256,11 +293,17 @@ const InvoiceForm = ({ invoice, onClose }) => {
 
       {/* Additional charges */}
       <div>
-        <label className="label">Additional Charges</label>
+        <label className="label">Additional Services</label>
         <div className="space-y-2">
           {formData.additionalCharges.map((charge, index) => (
             <div key={index} className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
-              <span className="flex-1">{charge.description}</span>
+              <div className="flex-1">
+                <p className="font-medium">{charge.description}</p>
+                <p className="text-xs text-gray-500">
+                  Date: {new Date(charge.date).toLocaleDateString()}
+                  {charge.jobId && ` • Job linked`}
+                </p>
+              </div>
               <span className="font-medium">${charge.amount.toFixed(2)}</span>
               <button
                 type="button"
@@ -271,32 +314,58 @@ const InvoiceForm = ({ invoice, onClose }) => {
               </button>
             </div>
           ))}
+        </div>
+
+        <div className="mt-3 p-4 border-2 border-dashed border-gray-300 rounded-lg space-y-3">
+          <p className="text-sm font-medium text-gray-700">Add Additional Service</p>
           
-          <div className="flex gap-2">
-            <input
-              type="text"
-              placeholder="Description"
-              value={newCharge.description}
-              onChange={(e) => setNewCharge(prev => ({ ...prev, description: e.target.value }))}
-              className="input flex-1"
-            />
+          <input
+            type="text"
+            value={newCharge.description}
+            onChange={(e) => setNewCharge({ ...newCharge, description: e.target.value })}
+            placeholder="Service description"
+            className="input w-full"
+          />
+          
+          <div className="grid grid-cols-2 gap-3">
             <input
               type="number"
-              placeholder="Amount"
               value={newCharge.amount}
-              onChange={(e) => setNewCharge(prev => ({ ...prev, amount: e.target.value }))}
+              onChange={(e) => setNewCharge({ ...newCharge, amount: e.target.value })}
+              placeholder="Amount"
               min="0"
               step="0.01"
-              className="input w-32"
+              className="input"
             />
-            <button
-              type="button"
-              onClick={handleAddCharge}
-              className="btn btn-secondary"
-            >
-              <Plus size={16} />
-            </button>
+            <input
+              type="date"
+              value={newCharge.date}
+              onChange={(e) => setNewCharge({ ...newCharge, date: e.target.value })}
+              className="input"
+            />
           </div>
+          
+          <select
+            value={newCharge.jobId}
+            onChange={(e) => setNewCharge({ ...newCharge, jobId: e.target.value })}
+            className="input w-full"
+          >
+            <option value="">No job linked (optional)</option>
+            {jobs.map(job => (
+              <option key={job.id} value={job.id}>
+                {job.clientName} - {job.type} ({new Date(job.date).toLocaleDateString()})
+              </option>
+            ))}
+          </select>
+          
+          <button
+            type="button"
+            onClick={handleAddCharge}
+            className="btn btn-secondary w-full flex items-center justify-center gap-2"
+          >
+            <Plus size={16} />
+            Add Service
+          </button>
         </div>
       </div>
 
@@ -311,7 +380,7 @@ const InvoiceForm = ({ invoice, onClose }) => {
             onChange={handleChange}
             min="0"
             max="100"
-            step="0.01"
+            step="0.1"
             className="input"
           />
         </div>
@@ -324,33 +393,9 @@ const InvoiceForm = ({ invoice, onClose }) => {
             onChange={handleChange}
             min="0"
             max="100"
-            step="0.01"
+            step="0.1"
             className="input"
           />
-        </div>
-      </div>
-
-      {/* Totals summary */}
-      <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-600">Subtotal:</span>
-          <span className="font-medium">${subtotal.toFixed(2)}</span>
-        </div>
-        {discount > 0 && (
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-600">Discount:</span>
-            <span className="font-medium text-red-600">-${discount.toFixed(2)}</span>
-          </div>
-        )}
-        {tax > 0 && (
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-600">Tax:</span>
-            <span className="font-medium">${tax.toFixed(2)}</span>
-          </div>
-        )}
-        <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-200">
-          <span>Total:</span>
-          <span>${total.toFixed(2)}</span>
         </div>
       </div>
 
@@ -361,13 +406,37 @@ const InvoiceForm = ({ invoice, onClose }) => {
           name="notes"
           value={formData.notes}
           onChange={handleChange}
-          rows="3"
+          rows="2"
           className="input"
           placeholder="Additional notes..."
         />
       </div>
 
-      {/* Actions */}
+      {/* Total summary */}
+      <div className="p-4 bg-gray-50 rounded-lg space-y-2">
+        <div className="flex justify-between text-sm">
+          <span>Subtotal:</span>
+          <span className="font-medium">${subtotal.toFixed(2)}</span>
+        </div>
+        {discount > 0 && (
+          <div className="flex justify-between text-sm text-red-600">
+            <span>Discount:</span>
+            <span>-${discount.toFixed(2)}</span>
+          </div>
+        )}
+        {tax > 0 && (
+          <div className="flex justify-between text-sm">
+            <span>Tax:</span>
+            <span className="font-medium">${tax.toFixed(2)}</span>
+          </div>
+        )}
+        <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-200">
+          <span>Total:</span>
+          <span>${total.toFixed(2)}</span>
+        </div>
+      </div>
+
+      {/* Form actions */}
       <div className="flex gap-3 pt-4 border-t border-gray-200">
         <button
           type="button"

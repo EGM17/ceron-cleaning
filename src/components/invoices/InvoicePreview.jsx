@@ -4,9 +4,19 @@ import { downloadInvoice } from '../../utils/invoiceGenerator';
 
 const InvoicePreview = ({ invoice, onClose, companySettings }) => {
   const handleDownload = async () => {
-    if (invoice.client && invoice.job) {
-      await downloadInvoice(invoice, invoice.client, invoice.job, companySettings);
+    if (!invoice.client) {
+      alert('Missing client data');
+      return;
     }
+    
+    // Job is optional - create fallback if missing
+    const jobData = invoice.job || {
+      date: invoice.date,
+      jobType: 'general',
+      location: invoice.client.address || ''
+    };
+    
+    await downloadInvoice(invoice, invoice.client, jobData, companySettings);
   };
 
   return (
@@ -115,7 +125,16 @@ const InvoicePreview = ({ invoice, onClose, companySettings }) => {
             {invoice.additionalCharges && invoice.additionalCharges.map((charge, index) => (
               <tr key={index} className="border-b border-gray-100">
                 <td className="py-3">{index + 2}</td>
-                <td className="py-3">{charge.description}</td>
+                <td className="py-3">
+                  <div>
+                    <p>{charge.description}</p>
+                    {charge.date && (
+                      <p className="text-xs text-gray-500">
+                        Due: {formatDate(charge.date)}
+                      </p>
+                    )}
+                  </div>
+                </td>
                 <td className="text-right py-3">1</td>
                 <td className="text-right py-3">{formatCurrency(charge.amount)}</td>
                 <td className="text-right py-3">{formatCurrency(charge.amount)}</td>

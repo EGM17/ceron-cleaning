@@ -21,19 +21,26 @@ const formatCurrency = (amount) => {
 export const generateInvoicePDF = async (invoice, client, job, companySettings = null) => {
   const doc = new jsPDF();
   
-  // Company header with logo
-  let yPosition = 20;
+  // Light blue background for ENTIRE page
+  doc.setFillColor(230, 240, 250);
+  doc.rect(0, 0, 210, 297, 'F');
   
+  // White square background for logo
+  if (companySettings?.logo) {
+    doc.setFillColor(255, 255, 255);
+    doc.rect(15, 10, 45, 45, 'F');
+  }
+  
+  // Company logo
+  let logoLoaded = false;
   if (companySettings?.logo) {
     try {
-      // Load image using HTML Image element to avoid CORS
       const img = new Image();
       img.crossOrigin = 'anonymous';
       
-      await new Promise((resolve, reject) => {
+      await new Promise((resolve) => {
         img.onload = () => {
           try {
-            // Create canvas to convert image to base64
             const canvas = document.createElement('canvas');
             canvas.width = img.width;
             canvas.height = img.height;
@@ -41,152 +48,97 @@ export const generateInvoicePDF = async (invoice, client, job, companySettings =
             ctx.drawImage(img, 0, 0);
             const base64 = canvas.toDataURL('image/png');
             
-            // Add logo to PDF
-            doc.addImage(base64, 'PNG', 20, 10, 30, 30);
+            doc.addImage(base64, 'PNG', 20, 15, 35, 35);
+            logoLoaded = true;
             resolve();
           } catch (error) {
             console.error('Error converting image:', error);
-            resolve(); // Continue without logo
+            resolve();
           }
         };
-        img.onerror = () => {
-          console.error('Error loading logo');
-          resolve(); // Continue without logo
-        };
+        img.onerror = () => resolve();
         img.src = companySettings.logo;
       });
-      
-      yPosition = 20;
     } catch (error) {
       console.error('Error adding logo:', error);
     }
   }
   
-  // Company name and info (right side of logo or top if no logo)
-  const companyX = companySettings?.logo ? 55 : 20;
-  
-  doc.setFontSize(24);
+  // Company name (to the right of logo)
+  doc.setTextColor(41, 98, 165);
   doc.setFont(undefined, 'bold');
-  doc.text(companySettings?.name || 'CERON CLEANING', companyX, yPosition);
+  doc.setFontSize(16);
+  doc.text(companySettings?.name || 'Ceron Cleaning', logoLoaded ? 65 : 20, 32);
   
-  doc.setFontSize(10);
-  doc.setFont(undefined, 'normal');
+  // INVOICE title (right side, larger)
+  doc.setTextColor(41, 98, 165);
+  doc.setFontSize(34); // Was 28, now 34 (21% bigger)
+  doc.text('Invoice', 190, 32, { align: 'right' });
   
-  let infoY = yPosition + 7;
-  if (companySettings?.address) {
-    doc.text(companySettings.address, companyX, infoY);
-    infoY += 5;
-  }
-  
-  const cityStateZip = [
-    companySettings?.city,
-    companySettings?.state,
-    companySettings?.zipCode
-  ].filter(Boolean).join(', ');
-  
-  if (cityStateZip) {
-    doc.text(cityStateZip, companyX, infoY);
-    infoY += 5;
-  }
-  
-  if (companySettings?.phone) {
-    doc.text(`Phone: ${companySettings.phone}`, companyX, infoY);
-    infoY += 5;
-  }
-  
-  if (companySettings?.email) {
-    doc.text(`Email: ${companySettings.email}`, companyX, infoY);
-    infoY += 5;
-  }
-  
-  if (companySettings?.website) {
-    doc.text(`Website: ${companySettings.website}`, companyX, infoY);
-  }
-  
-  // Invoice title and number (top right)
-  doc.setFontSize(20);
+  // To: section (left side, larger text)
+  doc.setTextColor(0, 0, 0);
   doc.setFont(undefined, 'bold');
-  doc.text('INVOICE', 150, 20);
+  doc.setFontSize(12); // Was 10, now 12 (20% bigger)
+  doc.text('To:', 20, 65);
   
-  doc.setFontSize(10);
+  doc.setTextColor(41, 98, 165);
   doc.setFont(undefined, 'normal');
-  doc.text(`Invoice #: ${invoice.invoiceNumber}`, 150, 30);
-  doc.text(`Date: ${formatDateUS(invoice.date)}`, 150, 35);
-  doc.text(`Due Date: ${formatDateUS(invoice.dueDate)}`, 150, 40);
+  doc.setFontSize(11); // Was 9, now 11 (22% bigger)
+  doc.text(client.name.toUpperCase(), 20, 72);
   
-  // Client information
-  doc.setFontSize(12);
-  doc.setFont(undefined, 'bold');
-  doc.text('Bill To:', 20, 55);
-  
-  doc.setFontSize(10);
-  doc.setFont(undefined, 'normal');
-  
-  let clientY = 62;
-  doc.text(client.name || 'N/A', 20, clientY);
-  clientY += 5;
-  
-  if (client.company) {
-    doc.text(client.company, 20, clientY);
-    clientY += 5;
-  }
+  doc.setTextColor(0, 0, 0);
+  let toY = 78;
   
   if (client.address) {
-    doc.text(client.address, 20, clientY);
-    clientY += 5;
+    doc.text(client.address, 20, toY);
+    toY += 6;
   }
-  
+  if (client.city || client.state || client.zipCode) {
+    const cityLine = `${client.city || ''} ${client.state || ''},${client.zipCode || ''}`.trim();
+    doc.text(cityLine, 20, toY);
+    toY += 6;
+  }
   if (client.phone) {
-    doc.text(`Phone: ${client.phone}`, 20, clientY);
-    clientY += 5;
+    doc.text(`(${client.phone.substring(0,3)}) ${client.phone.substring(3,6)}${client.phone.substring(6)}`, 20, toY);
+    toY += 6;
   }
   
+  // Invoice details (right side, larger)
+  doc.setTextColor(0, 0, 0);
+  doc.setFontSize(11); // Was 9, now 11 (22% bigger)
+  doc.text(`Date: ${formatDateUS(invoice.date)}`, 190, 65, { align: 'right' });
+  doc.text(`Invoice #: ${invoice.invoiceNumber.replace('INV-', '')}`, 190, 71, { align: 'right' });
+  
+  // Direct mail (right side, blue, larger)
   if (client.email) {
-    doc.text(`Email: ${client.email}`, 20, clientY);
+    doc.setTextColor(41, 98, 165);
+    doc.setFont(undefined, 'bold');
+    doc.setFontSize(10); // Was 8, now 10 (25% bigger)
+    doc.text('DIRECT MAIL:', 190, 79, { align: 'right' });
+    doc.setFont(undefined, 'normal');
+    doc.text(client.email, 190, 85, { align: 'right' });
+    if (client.alternateEmail) {
+      doc.text(client.alternateEmail, 190, 91, { align: 'right' });
+    }
   }
   
-  // Job details
-  doc.setFontSize(12);
-  doc.setFont(undefined, 'bold');
-  doc.text('Job Details:', 20, 95);
-  
-  doc.setFontSize(10);
-  doc.setFont(undefined, 'normal');
-  
-  const jobType = job.jobType ? 
-    (job.jobType === 'residential' ? 'Residential' : 'Commercial') : 
-    'N/A';
-  
-  doc.text(`Job Type: ${jobType}`, 20, 102);
-  doc.text(`Service Date: ${formatDateUS(job.date)}`, 20, 107);
-  
-  if (job.location) {
-    doc.text(`Location: ${job.location}`, 20, 112);
-  }
-  
-  if (job.description) {
-    doc.text('Description:', 20, 117);
-    const splitDescription = doc.splitTextToSize(job.description, 170);
-    doc.text(splitDescription, 20, 122);
-  }
-  
-  // Items table
+  // Table with yellow header and alternating rows
   const tableData = [];
   
-  // Main service
+  // Main service row
   tableData.push([
-    '1',
+    formatDateUS(job.date),
     invoice.serviceDescription || 'Cleaning Service',
     '1',
     formatCurrency(invoice.baseAmount),
     formatCurrency(invoice.baseAmount)
   ]);
   
-  // Additional charges
+  // Additional charges (if any)
   if (invoice.additionalCharges && invoice.additionalCharges.length > 0) {
-    invoice.additionalCharges.forEach((charge, index) => {
+    invoice.additionalCharges.forEach((charge) => {
       tableData.push([
-        (index + 2).toString(),
+        charge.date ? formatDateUS(charge.date) : '',
         charge.description,
         '1',
         formatCurrency(charge.amount),
@@ -195,59 +147,107 @@ export const generateInvoicePDF = async (invoice, client, job, companySettings =
     });
   }
   
-  const tableStartY = job.description ? 130 : 115;
+  // Empty rows (8 rows total, NO TEXT)
+  for (let i = 0; i < 8; i++) {
+    tableData.push(['', '', '', '', '']);
+  }
+  
+  const tableStartY = 105;
   
   doc.autoTable({
     startY: tableStartY,
-    head: [['#', 'Description', 'Qty', 'Unit Price', 'Total']],
+    head: [['DUE DATE', 'DESCRIPTION', 'QTY', 'UNIT PRICE', 'AMOUNT']],
     body: tableData,
-    theme: 'striped',
-    headStyles: { fillColor: [9, 109, 217] },
-    margin: { left: 20, right: 20 }
+    theme: 'plain',
+    headStyles: { 
+      fillColor: [255, 215, 0], // Yellow
+      textColor: [0, 0, 0],
+      fontStyle: 'bold',
+      fontSize: 10,
+      halign: 'center',
+      lineWidth: 0
+    },
+    bodyStyles: {
+      fontSize: 10,
+      cellPadding: 2.5, // Reduced from 4 to 2.5
+      lineWidth: 0
+    },
+    columnStyles: {
+      0: { halign: 'center', cellWidth: 32 },
+      1: { halign: 'left', cellWidth: 78 },
+      2: { halign: 'center', cellWidth: 18 },
+      3: { halign: 'right', cellWidth: 32 },
+      4: { halign: 'right', cellWidth: 32 }
+    },
+    margin: { left: 10, right: 10 },
+    didParseCell: function(data) {
+      if (data.section === 'body') {
+        // Alternating pattern: white, blue, white, blue...
+        if (data.row.index % 2 === 0) {
+          data.cell.styles.fillColor = [255, 255, 255]; // White
+        } else {
+          data.cell.styles.fillColor = [230, 240, 250]; // Light blue
+        }
+      }
+    }
   });
   
-  // Calculate totals
-  const finalY = doc.lastAutoTable.finalY + 10;
+  // Totals section with spacing and alternating colors
+  const finalY = doc.lastAutoTable.finalY + 5; // Add 5pt spacing
   
-  doc.setFontSize(10);
-  doc.text('Subtotal:', 130, finalY);
-  doc.text(formatCurrency(invoice.subtotal), 180, finalY, { align: 'right' });
+  const totalsData = [];
+  totalsData.push(['Subtotal', formatCurrency(invoice.subtotal)]);
+  totalsData.push(['Sales Tax', invoice.tax > 0 ? formatCurrency(invoice.tax) : '']);
+  totalsData.push(['Total', formatCurrency(invoice.total)]);
   
-  if (invoice.discount > 0) {
-    doc.text(`Discount (${invoice.discountPercent || 0}%):`, 130, finalY + 7);
-    doc.text(`-${formatCurrency(invoice.discount)}`, 180, finalY + 7, { align: 'right' });
-  }
+  doc.autoTable({
+    startY: finalY,
+    body: totalsData,
+    theme: 'plain',
+    bodyStyles: {
+      fontSize: 11,
+      cellPadding: 3, // Reduced from 4 to 3
+      lineWidth: 0
+    },
+    columnStyles: {
+      0: { halign: 'right', cellWidth: 35, textColor: [0, 0, 0] },
+      1: { halign: 'right', cellWidth: 32, textColor: [0, 0, 0] }
+    },
+    margin: { left: 125 },
+    didParseCell: function(data) {
+      // Alternating: blue (0), white (1), blue (2)
+      if (data.row.index === 0) {
+        data.cell.styles.fillColor = [230, 240, 250]; // Blue
+      } else if (data.row.index === 1) {
+        data.cell.styles.fillColor = [255, 255, 255]; // White
+      } else if (data.row.index === 2) {
+        data.cell.styles.fillColor = [230, 240, 250]; // Blue
+        data.cell.styles.fontStyle = 'bold';
+        data.cell.styles.textColor = [41, 98, 165];
+        data.cell.styles.fontSize = 12;
+      }
+    }
+  });
   
-  if (invoice.tax > 0) {
-    doc.text(`Tax (${invoice.taxPercent || 0}%):`, 130, finalY + 14);
-    doc.text(formatCurrency(invoice.tax), 180, finalY + 14, { align: 'right' });
-  }
-  
-  doc.setFont(undefined, 'bold');
-  doc.setFontSize(12);
-  doc.text('Total:', 130, finalY + 21);
-  doc.text(formatCurrency(invoice.total), 180, finalY + 21, { align: 'right' });
-  
-  // Payment info
-  if (invoice.payments && invoice.payments.length > 0) {
-    const totalPaid = invoice.payments.reduce((sum, p) => sum + p.amount, 0);
-    doc.setFont(undefined, 'normal');
-    doc.setFontSize(10);
-    doc.text('Amount Paid:', 130, finalY + 28);
-    doc.text(formatCurrency(totalPaid), 180, finalY + 28, { align: 'right' });
-    
-    doc.setFont(undefined, 'bold');
-    doc.text('Balance Due:', 130, finalY + 35);
-    doc.text(formatCurrency(invoice.total - totalPaid), 180, finalY + 35, { align: 'right' });
-  }
+  const footerY = doc.lastAutoTable.finalY + 20;
   
   // Footer
-  doc.setFontSize(9);
-  doc.setFont(undefined, 'italic');
-  doc.text('Thank you for your business!', 105, 270, { align: 'center' });
+  doc.setTextColor(0, 0, 0);
+  doc.setFont(undefined, 'bold');
+  doc.setFontSize(11);
+  doc.text('Make all checks payable to Ceron Cleaning', 105, footerY, { align: 'center' });
   
-  const companyName = companySettings?.name || 'CERON CLEANING';
-  doc.text(`Payment is due within 30 days. Please make checks payable to ${companyName}.`, 105, 275, { align: 'center' });
+  doc.setFont(undefined, 'italic');
+  doc.setFontSize(10);
+  doc.text('Thank you for your business!', 105, footerY + 8, { align: 'center' });
+  
+  // Company address footer (smaller to fit)
+  doc.setFont(undefined, 'normal');
+  doc.setFontSize(9);
+  const footerAddress = companySettings?.address && companySettings?.city && companySettings?.state ?
+    `${companySettings.address}, ${companySettings.city}, ${companySettings.state} ${companySettings.zipCode || ''} | ${companySettings.email || ''}` :
+    '703 NW 59th St, Vancouver, WA 98663 | cleaningceron@gmail.com';
+  doc.text(footerAddress, 105, footerY + 15, { align: 'center' });
   
   return doc;
 };

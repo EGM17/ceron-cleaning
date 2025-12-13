@@ -64,12 +64,19 @@ const Invoices = () => {
   };
 
   const handleDownload = async (invoice) => {
-    if (invoice.client && invoice.job) {
-      await downloadInvoice(invoice, invoice.client, invoice.job, companySettings);
-    } else {
-      alert('Missing client or job data for this invoice');
-    }
+  if (!invoice.client) {
+    alert('Missing client data for this invoice');
+    return;
+  }
+  
+  const jobData = invoice.job || {
+    date: invoice.date,
+    jobType: 'general',
+    location: invoice.client.address || ''
   };
+  
+  await downloadInvoice(invoice, invoice.client, jobData, companySettings);
+};
 
   const handleEdit = (invoice) => {
     setSelectedInvoice(invoice);
